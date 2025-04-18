@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
         },
         { role: 'user', content: message },
       ],
-      max_tokens: 150,
+      max_tokens: 1000,
       temperature: 0.7,
     });
 
