@@ -18,110 +18,45 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-interface Voice {
-  name: string;
-  voiceURI: string;
-  lang: string;
-}
+// OpenAI voice options
+const OPENAI_VOICES = [
+  { id: 'alloy', name: 'Alloy' },
+  { id: 'echo', name: 'Echo' },
+  { id: 'fable', name: 'Fable' },
+  { id: 'onyx', name: 'Onyx' },
+  { id: 'nova', name: 'Nova' },
+  { id: 'shimmer', name: 'Shimmer' },
+];
 
 export function VoiceChat() {
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [error, setError] = useState("");
-  const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>("");
-  const [speechRate, setSpeechRate] = useState<number>(1.0);
-  const [speechPitch, setSpeechPitch] = useState<number>(1.0);
+  const [selectedVoice, setSelectedVoice] = useState<string>("alloy");
+  const [isPlaying, setIsPlaying] = useState(false);
   
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const synthesisRef = useRef<SpeechSynthesis | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Initialize speech recognition and synthesis
+  // Initialize audio element
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Check if browser supports speech recognition
-      if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        
-        recognitionRef.current.onresult = (event) => {
-          const transcript = Array.from(event.results)
-            .map(result => result[0])
-            .map(result => result.transcript)
-            .join("");
-          setTranscript(transcript);
-        };
-        
-        recognitionRef.current.onerror = (event) => {
-          console.error("Speech recognition error", event.error);
-          setError(`Microphone error: ${event.error}`);
-          setIsListening(false);
-        };
-      } else {
-        setError("Your browser does not support speech recognition");
-      }
-      
-      // Initialize speech synthesis
-      if ("speechSynthesis" in window) {
-        synthesisRef.current = window.speechSynthesis;
-        
-        // Load available voices
-        const loadVoices = () => {
-          const voices = synthesisRef.current?.getVoices() || [];
-          const voiceList = voices.map(voice => ({
-            name: voice.name,
-            voiceURI: voice.voiceURI,
-            lang: voice.lang
-          }));
-          setAvailableVoices(voiceList);
-          
-          // Set default voice if available
-          if (voiceList.length > 0) {
-            // Try to find a voice with English language
-            const englishVoice = voiceList.find(voice => voice.lang.includes('en'));
-            const defaultVoice = englishVoice || voiceList[0];
-            setSelectedVoice(defaultVoice.voiceURI);
-            
-            // Save to localStorage
-            localStorage.setItem("selected-voice", defaultVoice.voiceURI);
-            localStorage.setItem("speech-rate", "1.0");
-            localStorage.setItem("speech-pitch", "1.0");
-          }
-        };
-        
-        // Chrome loads voices asynchronously
-        if (synthesisRef.current.onvoiceschanged !== undefined) {
-          synthesisRef.current.onvoiceschanged = loadVoices;
-        }
-        
-        // Initial load of voices
-        loadVoices();
-        
-        // Load saved preferences
-        const savedVoice = localStorage.getItem("selected-voice");
-        const savedRate = localStorage.getItem("speech-rate");
-        const savedPitch = localStorage.getItem("speech-pitch");
-        
-        if (savedVoice) setSelectedVoice(savedVoice);
-        if (savedRate) setSpeechRate(parseFloat(savedRate));
-        if (savedPitch) setSpeechPitch(parseFloat(savedPitch));
-      } else {
-        setError("Your browser does not support speech synthesis");
-      }
+      audioRef.current = new Audio();
+      audioRef.current.onended = () => {
+        setIsPlaying(false);
+      };
       
       // Check for stored API key
       const storedApiKey = localStorage.getItem("openai-api-key");
@@ -130,14 +65,18 @@ export function VoiceChat() {
       } else {
         setIsApiKeyModalOpen(true);
       }
+      
+      // Load saved voice preference
+      const savedVoice = localStorage.getItem("openai-voice");
+      if (savedVoice) {
+        setSelectedVoice(savedVoice);
+      }
     }
     
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-      if (synthesisRef.current) {
-        synthesisRef.current.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
       }
     };
   }, []);
@@ -147,28 +86,104 @@ export function VoiceChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
   
-  const toggleListening = () => {
-    if (!apiKey) {
-      setIsApiKeyModalOpen(true);
-      return;
-    }
-    
-    if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+  const startRecording = async () => {
+    try {
+      if (!apiKey) {
+        setIsApiKeyModalOpen(true);
+        return;
       }
-      setIsListening(false);
       
-      if (transcript.trim()) {
-        sendMessage(transcript);
-      }
-    } else {
-      setTranscript("");
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      }
-      setIsListening(true);
       setError("");
+      audioChunksRef.current = [];
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Try to use a supported MIME type with fallbacks for browser compatibility
+      let mimeType = 'audio/webm; codecs=opus';
+      
+      // Check if the browser supports the preferred MIME type
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        // Fallback options in order of preference
+        const fallbackTypes = [
+          'audio/webm',
+          'audio/ogg; codecs=opus',
+          'audio/mp4',
+          'audio/wav'
+        ];
+        
+        for (const type of fallbackTypes) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            mimeType = type;
+            console.log(`Using fallback MIME type: ${mimeType}`);
+            break;
+          }
+        }
+      }
+      
+      // Create MediaRecorder with the supported MIME type
+      const mediaRecorder = new MediaRecorder(stream, { 
+        mimeType: mimeType
+      });
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        await transcribeAudio(audioBlob);
+        
+        // Stop all tracks to release the microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      setError("Could not access microphone. Please check your browser permissions.");
+      setIsRecording(false);
+    }
+  };
+  
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+  
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setIsProcessing(true);
+      
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+      formData.append('apiKey', apiKey);
+      
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to transcribe audio");
+      }
+      
+      const data = await response.json();
+      setTranscript(data.text);
+      
+      if (data.text.trim()) {
+        await sendMessage(data.text);
+      }
+    } catch (err) {
+      console.error("Error transcribing audio:", err);
+      setError(err instanceof Error ? err.message : "Failed to transcribe audio");
+      setIsProcessing(false);
     }
   };
   
@@ -201,23 +216,8 @@ export function VoiceChat() {
       const assistantMessage: Message = { role: "assistant", content: data.response };
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Speak the response with selected voice
-      if (synthesisRef.current) {
-        const utterance = new SpeechSynthesisUtterance(data.response);
-        
-        // Set selected voice
-        const voices = synthesisRef.current.getVoices();
-        const voice = voices.find(v => v.voiceURI === selectedVoice);
-        if (voice) {
-          utterance.voice = voice;
-        }
-        
-        // Set rate and pitch
-        utterance.rate = speechRate;
-        utterance.pitch = speechPitch;
-        
-        synthesisRef.current.speak(utterance);
-      }
+      // Play the response using OpenAI's TTS
+      await playResponseAudio(data.response);
     } catch (err) {
       console.error("Error sending message:", err);
       setError(err instanceof Error ? err.message : "Failed to get response");
@@ -226,31 +226,62 @@ export function VoiceChat() {
     }
   };
   
+  const playResponseAudio = async (text: string) => {
+    try {
+      const response = await fetch("/api/speak", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          voice: selectedVoice,
+          apiKey,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate speech");
+      }
+      
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (err) {
+      console.error("Error playing audio:", err);
+      setError(err instanceof Error ? err.message : "Failed to play audio response");
+    }
+  };
+  
   const handleApiKeySubmit = (key: string) => {
     setApiKey(key);
   };
   
-  const stopSpeaking = () => {
-    if (synthesisRef.current) {
-      synthesisRef.current.cancel();
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsPlaying(false);
     }
   };
   
-  const handleVoiceChange = (voiceURI: string) => {
-    setSelectedVoice(voiceURI);
-    localStorage.setItem("selected-voice", voiceURI);
+  const handleVoiceChange = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    localStorage.setItem("openai-voice", voiceId);
   };
   
-  const handleRateChange = (value: number[]) => {
-    const rate = value[0];
-    setSpeechRate(rate);
-    localStorage.setItem("speech-rate", rate.toString());
-  };
-  
-  const handlePitchChange = (value: number[]) => {
-    const pitch = value[0];
-    setSpeechPitch(pitch);
-    localStorage.setItem("speech-pitch", pitch.toString());
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   };
   
   return (
@@ -291,21 +322,33 @@ export function VoiceChat() {
       )}
       
       <div className="border-t border-gray-200 dark:border-gray-800 p-4 backdrop-blur-sm bg-white/30 dark:bg-gray-900/30">
-        {isListening && (
+        {transcript && (
           <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-            <p className="text-sm">{transcript || "Listening..."}</p>
+            <p className="text-sm">{transcript}</p>
+          </div>
+        )}
+        
+        {isRecording && (
+          <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+            <div className="flex items-center justify-center">
+              <div className="relative w-4 h-4">
+                <div className="absolute w-full h-full rounded-full bg-red-500 animate-ping opacity-75"></div>
+                <div className="absolute w-full h-full rounded-full bg-red-500"></div>
+              </div>
+              <p className="ml-2 text-sm">Recording...</p>
+            </div>
           </div>
         )}
         
         <div className="flex items-center gap-2">
           <Button 
-            variant={isListening ? "destructive" : "default"}
+            variant={isRecording ? "destructive" : "default"}
             size="icon"
             className="rounded-full h-12 w-12"
-            onClick={toggleListening}
+            onClick={toggleRecording}
             disabled={isProcessing}
           >
-            {isListening ? <StopCircle className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+            {isRecording ? <StopCircle className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
           </Button>
           
           <div className="flex-1">
@@ -331,7 +374,7 @@ export function VoiceChat() {
                 <h4 className="font-medium">Voice Settings</h4>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="voice-select">Voice</Label>
+                  <Label htmlFor="voice-select">OpenAI Voice</Label>
                   <Select 
                     value={selectedVoice} 
                     onValueChange={handleVoiceChange}
@@ -340,41 +383,13 @@ export function VoiceChat() {
                       <SelectValue placeholder="Select a voice" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableVoices.map((voice) => (
-                        <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                          {voice.name} ({voice.lang})
+                      {OPENAI_VOICES.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label htmlFor="rate-slider">Rate: {speechRate.toFixed(1)}</Label>
-                  </div>
-                  <Slider
-                    id="rate-slider"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={[speechRate]}
-                    onValueChange={handleRateChange}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label htmlFor="pitch-slider">Pitch: {speechPitch.toFixed(1)}</Label>
-                  </div>
-                  <Slider
-                    id="pitch-slider"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={[speechPitch]}
-                    onValueChange={handlePitchChange}
-                  />
                 </div>
                 
                 <div className="text-xs text-gray-500">
@@ -388,7 +403,8 @@ export function VoiceChat() {
             variant="outline"
             size="icon"
             className="rounded-full"
-            onClick={stopSpeaking}
+            onClick={stopAudio}
+            disabled={!isPlaying}
           >
             <MicOff className="h-4 w-4" />
           </Button>
