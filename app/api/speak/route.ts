@@ -24,8 +24,9 @@ export async function POST(request: NextRequest) {
       apiKey: apiKey,
     });
 
-    // Default to 'alloy' voice if none specified
-    const selectedVoice = voice || 'alloy';
+    // Default to 'nova' voice if none specified
+    // Available voices for gpt-4o-mini-tts: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
+    const selectedVoice = voice || 'sage';
 
     // Generate speech from text using OpenAI's TTS API with enhanced control
     const mp3Response = await openai.audio.speech.create({
@@ -33,8 +34,17 @@ export async function POST(request: NextRequest) {
       voice: selectedVoice,
       input: text,
       // Optional instructions to control voice characteristics
-      instructions: `Speak in a natural, conversational tone with appropriate pauses and emphasis. 
-                   Maintain a friendly, helpful demeanor and adjust your pace to be clear and engaging.`,
+      instructions: `Voice Affect: Calm, composed, and reassuring. Competent and in control, instilling trust.
+
+Tone: Sincere, empathetic, with genuine concern for the customer and understanding of the situation.
+
+Pacing: Slower during the apology to allow for clarity and processing. Faster when offering solutions to signal action and resolution.
+
+Emotions: Calm reassurance, empathy, and gratitude.
+
+Pronunciation: Clear, precise: Ensures clarity, especially with key details. Focus on key words like "refund" and "patience. From the deep southern accent" 
+
+Pauses: Before and after the apology to give space for processing the apology.`,
     });
 
     // Convert the response to an ArrayBuffer
