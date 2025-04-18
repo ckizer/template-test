@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mic, MicOff, Send, StopCircle, Settings } from "lucide-react";
+import { Mic, MicOff, Send, StopCircle, Settings, Loader2 } from "lucide-react";
 import { ApiKeyModal } from "@/components/ApiKeyModal";
 import { 
   Select, 
@@ -39,7 +39,11 @@ const TIMESLICE_MS = 100; // Request data every 100ms
 const RECORDING_DELAY_MS = 500; // Add a small delay before stopping to capture trailing audio
 
 export function VoiceChat() {
+  // Recording states
+  const [isPreparingToRecord, setIsPreparingToRecord] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [hasReceivedAudioData, setHasReceivedAudioData] = useState(false);
+  
   const [transcript, setTranscript] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -55,6 +59,7 @@ export function VoiceChat() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Initialize audio element
   useEffect(() => {
@@ -93,6 +98,10 @@ export function VoiceChat() {
       if (stopTimeoutRef.current) {
         clearTimeout(stopTimeoutRef.current);
       }
+      
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+      }
     };
   }, [recordingStream]);
   
@@ -100,6 +109,21 @@ export function VoiceChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+  
+  // Safety timeout for recording preparation
+  useEffect(() => {
+    if (isPreparingToRecord) {
+      // If we're still in "preparing" state after 5 seconds, something went wrong
+      const timeout = setTimeout(() => {
+        if (isPreparingToRecord && !isRecording) {
+          setIsPreparingToRecord(false);
+          setError("Recording initialization timed out. Please try again.");
+        }
+      }, 5000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isPreparingToRecord, isRecording]);
   
   const startRecording = async () => {
     try {
@@ -110,6 +134,10 @@ export function VoiceChat() {
       
       setError("");
       audioChunksRef.current = [];
+      setHasReceivedAudioData(false);
+      
+      // Set preparing state to show loading indicator
+      setIsPreparingToRecord(true);
       
       // Get audio stream
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -153,7 +181,20 @@ export function VoiceChat() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          
+          // Only set this flag once we've actually received audio data
+          if (!hasReceivedAudioData) {
+            setHasReceivedAudioData(true);
+            console.log("First audio data chunk received");
+          }
         }
+      };
+      
+      // When recording starts
+      mediaRecorder.onstart = () => {
+        console.log("MediaRecorder started");
+        setIsRecording(true);
+        setIsPreparingToRecord(false);
       };
       
       // When recording stops, process the audio
@@ -162,6 +203,7 @@ export function VoiceChat() {
         if (audioChunksRef.current.length === 0) {
           setError("No audio data captured. Please try again.");
           setIsRecording(false);
+          setHasReceivedAudioData(false);
           return;
         }
         
@@ -182,24 +224,55 @@ export function VoiceChat() {
           recordingStream.getTracks().forEach(track => track.stop());
           setRecordingStream(null);
         }
+        
+        // Reset recording states
+        setIsRecording(false);
+        setHasReceivedAudioData(false);
       };
       
       // Start recording with timeslice to get frequent ondataavailable events
       mediaRecorder.start(TIMESLICE_MS);
       mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
+      
+      // Set a timeout to check if we've received any audio data
+      recordingTimeoutRef.current = setTimeout(() => {
+        if (!hasReceivedAudioData && mediaRecorderRef.current) {
+          console.log("No audio data received yet, requesting data");
+          mediaRecorderRef.current.requestData();
+        }
+      }, 1000);
+      
     } catch (err) {
       console.error("Error starting recording:", err);
       setError("Could not access microphone. Please check your browser permissions.");
+      setIsPreparingToRecord(false);
       setIsRecording(false);
+      setHasReceivedAudioData(false);
     }
   };
   
   const stopRecording = () => {
-    // Clear any existing timeout
+    // Clear any existing timeouts
     if (stopTimeoutRef.current) {
       clearTimeout(stopTimeoutRef.current);
       stopTimeoutRef.current = null;
+    }
+    
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    
+    // If we're still preparing, just cancel the operation
+    if (isPreparingToRecord && !isRecording) {
+      setIsPreparingToRecord(false);
+      
+      // Clean up any stream that might have been created
+      if (recordingStream) {
+        recordingStream.getTracks().forEach(track => track.stop());
+        setRecordingStream(null);
+      }
+      return;
     }
     
     // Add a small delay before stopping to capture trailing audio
@@ -213,9 +286,13 @@ export function VoiceChat() {
           mediaRecorderRef.current.stop();
         } catch (err) {
           console.error("Error stopping recording:", err);
+          setIsRecording(false);
+          setHasReceivedAudioData(false);
         }
+      } else {
+        setIsRecording(false);
+        setHasReceivedAudioData(false);
       }
-      setIsRecording(false);
     }, RECORDING_DELAY_MS);
   };
   
@@ -343,12 +420,37 @@ export function VoiceChat() {
   };
   
   const toggleRecording = () => {
-    if (isRecording) {
+    if (isPreparingToRecord || isRecording) {
       stopRecording();
     } else {
       startRecording();
     }
   };
+  
+  // Determine the button state and appearance
+  const getRecordButtonState = () => {
+    if (isPreparingToRecord) {
+      return {
+        variant: "outline" as const,
+        icon: <Loader2 className="h-6 w-6 animate-spin" />,
+        disabled: false
+      };
+    } else if (isRecording) {
+      return {
+        variant: "destructive" as const,
+        icon: <StopCircle className="h-6 w-6" />,
+        disabled: false
+      };
+    } else {
+      return {
+        variant: "default" as const,
+        icon: <Mic className="h-6 w-6" />,
+        disabled: isProcessing
+      };
+    }
+  };
+  
+  const recordButtonState = getRecordButtonState();
   
   return (
     <div className="flex flex-col h-full max-w-md mx-auto">
@@ -394,7 +496,7 @@ export function VoiceChat() {
           </div>
         )}
         
-        {isRecording && (
+        {isRecording && hasReceivedAudioData && (
           <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
             <div className="flex items-center justify-center">
               <div className="relative w-4 h-4">
@@ -406,15 +508,24 @@ export function VoiceChat() {
           </div>
         )}
         
+        {isPreparingToRecord && !isRecording && (
+          <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+            <div className="flex items-center justify-center">
+              <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+              <p className="ml-2 text-sm text-gray-500">Preparing microphone...</p>
+            </div>
+          </div>
+        )}
+        
         <div className="flex items-center gap-2">
           <Button 
-            variant={isRecording ? "destructive" : "default"}
+            variant={recordButtonState.variant}
             size="icon"
             className="rounded-full h-12 w-12"
             onClick={toggleRecording}
-            disabled={isProcessing}
+            disabled={recordButtonState.disabled}
           >
-            {isRecording ? <StopCircle className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+            {recordButtonState.icon}
           </Button>
           
           <div className="flex-1">
