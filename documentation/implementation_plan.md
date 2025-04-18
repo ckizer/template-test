@@ -34,15 +34,23 @@
    ```
    *[Validation: Backend Development]*
 
-## Phase 4: Integration
+## Phase 4: Voice Customization
 
-18. **Frontend-Backend Connection:** In the `VoiceChat` component, implement a call (using `fetch` or `axios`) to the `/api/chat` endpoint when a voice message is ready to be sent. Include the stored API key in the request payload. *[User Flow: API Processing; Key Features: API Key Authentication]*
-19. **Local Data Storage:** Implement logic in the frontend to store the conversation data locally (e.g., in `localStorage`) for the duration of the session. *[Key Features: Local Data Storage]*
-20. **Full Flow Validation:** Conduct an end-to-end test by simulating a voice conversation. Validate that speech is captured, transcribed text is sent to the API, the API response is received and converted to speech, and that all conversation data is stored locally. *[Validation: Integration]*
+18. **Voice Selection Interface:** Add a settings panel to the VoiceChat component that allows users to select from available system voices. *[Key Features: Voice Interaction]*
+19. **Speech Rate and Pitch Controls:** Implement sliders for adjusting speech rate and pitch to customize the voice output. *[Key Features: Voice Interaction]*
+20. **Voice Settings Persistence:** Store user voice preferences in localStorage to maintain settings between sessions. *[Key Features: Local Data Storage]*
+21. **TypeScript Integration:** Create proper type definitions for the Web Speech API to ensure type safety and better developer experience. *[Tech Stack: Core Tools]*
+22. **Documentation:** Create comprehensive documentation explaining the voice customization features, browser compatibility, and troubleshooting tips. *[Project Summary: Documentation]*
 
-## Phase 5: Deployment
+## Phase 5: Integration
 
-21. **Vercel Deployment:** Deploy the Next.js project to Vercel using the provided Vercel configuration. Ensure that the app runs securely over HTTPS. *[Tech Stack: Deployment]*
-22. **CI/CD Pipeline:** Set up a CI/CD pipeline (e.g., via GitHub Actions) for automated testing and deployment of the project. *[Tech Stack: Deployment]*
-23. **Final Validation:** After deployment, conduct end-to-end tests on actual iPhone devices or simulators to confirm that voice interaction, API calls, and UI responsiveness meet performance and usability standards. *[Non-Functional Requirements: Performance, Usability]*
-24. **Documentation:** Document any known limitations (e.g., potential API rate limits, browser compatibility issues) and outline areas for future enhancements such as Supabase integration or advanced authentication with Clerk Auth. *[Project Summary: Potential Pitfalls; Constraints and Assumptions]*
+23. **Frontend-Backend Connection:** In the `VoiceChat` component, implement a call (using `fetch` or `axios`) to the `/api/chat` endpoint when a voice message is ready to be sent. Include the stored API key in the request payload. *[User Flow: API Processing; Key Features: API Key Authentication]*
+24. **Local Data Storage:** Implement logic in the frontend to store the conversation data locally (e.g., in `localStorage`) for the duration of the session. *[Key Features: Local Data Storage]*
+25. **Full Flow Validation:** Conduct an end-to-end test by simulating a voice conversation. Validate that speech is captured, transcribed text is sent to the API, the API response is received and converted to speech, and that all conversation data is stored locally. *[Validation: Integration]*
+
+## Phase 6: Deployment
+
+26. **Vercel Deployment:** Deploy the Next.js project to Vercel using the provided Vercel configuration. Ensure that the app runs securely over HTTPS. *[Tech Stack: Deployment]*
+27. **CI/CD Pipeline:** Set up a CI/CD pipeline (e.g., via GitHub Actions) for automated testing and deployment of the project. *[Tech Stack: Deployment]*
+28. **Final Validation:** After deployment, conduct end-to-end tests on actual iPhone devices or simulators to confirm that voice interaction, API calls, and UI responsiveness meet performance and usability standards. *[Non-Functional Requirements: Performance, Usability]*
+29. **Documentation:** Document any known limitations (e.g., potential API rate limits, browser compatibility issues) and outline areas for future enhancements such as Supabase integration or advanced authentication with Clerk Auth. *[Project Summary: Potential Pitfalls; Constraints and Assumptions]*
