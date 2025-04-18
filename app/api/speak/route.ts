@@ -27,11 +27,14 @@ export async function POST(request: NextRequest) {
     // Default to 'alloy' voice if none specified
     const selectedVoice = voice || 'alloy';
 
-    // Generate speech from text using OpenAI's TTS API
+    // Generate speech from text using OpenAI's TTS API with enhanced control
     const mp3Response = await openai.audio.speech.create({
-      model: 'tts-1',
+      model: 'gpt-4o-mini-tts',
       voice: selectedVoice,
       input: text,
+      // Optional instructions to control voice characteristics
+      instructions: `Speak in a natural, conversational tone with appropriate pauses and emphasis. 
+                   Maintain a friendly, helpful demeanor and adjust your pace to be clear and engaging.`,
     });
 
     // Convert the response to an ArrayBuffer
