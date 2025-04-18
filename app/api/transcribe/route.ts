@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { writeFile } from 'fs/promises';
+import { writeFile, readFile } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir } from 'fs/promises';
@@ -35,6 +35,8 @@ const getFileExtension = (mimeType: string): string => {
 };
 
 export async function POST(request: NextRequest) {
+  let filePath = '';
+  
   try {
     const formData = await request.formData();
     const apiKey = formData.get('apiKey');
@@ -66,15 +68,27 @@ export async function POST(request: NextRequest) {
     // Save audio file to temp directory with correct extension
     const tempDir = await ensureTempDir();
     const fileName = `${uuidv4()}.${fileExt}`;
-    const filePath = join(tempDir, fileName);
+    filePath = join(tempDir, fileName);
     
     const buffer = Buffer.from(await audioFile.arrayBuffer());
     await writeFile(filePath, buffer);
 
     // Log file information for debugging
     console.log(`Audio file saved to ${filePath}, size: ${buffer.length} bytes, type: ${contentType}`);
+    
+    // Validate the audio file has actual content
+    if (buffer.length < 100) {
+      return NextResponse.json(
+        { error: 'Audio file is too small or empty' },
+        { status: 400 }
+      );
+    }
 
     try {
+      // Read the file back to verify it was written correctly
+      const fileStats = await readFile(filePath);
+      console.log(`Verified file size: ${fileStats.length} bytes`);
+      
       // Send audio to OpenAI for transcription
       const transcription = await openai.audio.transcriptions.create({
         file: createReadStream(filePath),

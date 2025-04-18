@@ -34,6 +34,10 @@ const OPENAI_VOICES = [
   { id: 'shimmer', name: 'Shimmer' },
 ];
 
+// Constants for audio recording
+const TIMESLICE_MS = 100; // Request data every 100ms
+const RECORDING_DELAY_MS = 500; // Add a small delay before stopping to capture trailing audio
+
 export function VoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -44,11 +48,13 @@ export function VoiceChat() {
   const [error, setError] = useState("");
   const [selectedVoice, setSelectedVoice] = useState<string>("alloy");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Initialize audio element
   useEffect(() => {
@@ -78,8 +84,17 @@ export function VoiceChat() {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      
+      // Clean up any recording stream on unmount
+      if (recordingStream) {
+        recordingStream.getTracks().forEach(track => track.stop());
+      }
+      
+      if (stopTimeoutRef.current) {
+        clearTimeout(stopTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [recordingStream]);
   
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -96,7 +111,16 @@ export function VoiceChat() {
       setError("");
       audioChunksRef.current = [];
       
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Get audio stream
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
+      setRecordingStream(stream);
       
       // Try to use a supported MIME type with fallbacks for browser compatibility
       let mimeType = 'audio/webm; codecs=opus';
@@ -125,21 +149,43 @@ export function VoiceChat() {
         mimeType: mimeType
       });
       
+      // Request data frequently to ensure we capture everything
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
       
+      // When recording stops, process the audio
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        await transcribeAudio(audioBlob);
+        // Make sure we have audio data
+        if (audioChunksRef.current.length === 0) {
+          setError("No audio data captured. Please try again.");
+          setIsRecording(false);
+          return;
+        }
         
-        // Stop all tracks to release the microphone
-        stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        // Log the audio size for debugging
+        console.log(`Audio recording complete: ${audioBlob.size} bytes`);
+        
+        // Only process if we have a meaningful amount of audio data
+        if (audioBlob.size > 100) {
+          await transcribeAudio(audioBlob);
+        } else {
+          setError("Recording too short. Please try again and speak clearly.");
+        }
+        
+        // Clean up the media stream
+        if (recordingStream) {
+          recordingStream.getTracks().forEach(track => track.stop());
+          setRecordingStream(null);
+        }
       };
       
-      mediaRecorder.start();
+      // Start recording with timeslice to get frequent ondataavailable events
+      mediaRecorder.start(TIMESLICE_MS);
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
     } catch (err) {
@@ -150,10 +196,27 @@ export function VoiceChat() {
   };
   
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    // Clear any existing timeout
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
     }
+    
+    // Add a small delay before stopping to capture trailing audio
+    stopTimeoutRef.current = setTimeout(() => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          // Request one final chunk of data
+          mediaRecorderRef.current.requestData();
+          
+          // Then stop the recording
+          mediaRecorderRef.current.stop();
+        } catch (err) {
+          console.error("Error stopping recording:", err);
+        }
+      }
+      setIsRecording(false);
+    }, RECORDING_DELAY_MS);
   };
   
   const transcribeAudio = async (audioBlob: Blob) => {
@@ -179,6 +242,9 @@ export function VoiceChat() {
       
       if (data.text.trim()) {
         await sendMessage(data.text);
+      } else {
+        setIsProcessing(false);
+        setError("No speech detected. Please try again and speak clearly.");
       }
     } catch (err) {
       console.error("Error transcribing audio:", err);
