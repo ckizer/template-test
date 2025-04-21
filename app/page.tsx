@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { VoiceChat } from '@/components/VoiceChat'
+import VoiceChat from '@/components/VoiceChat'
 import { Card, CardContent } from '@/components/ui/card'
 
 export default function Home() {

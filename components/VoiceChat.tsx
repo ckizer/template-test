@@ -4,21 +4,18 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Mic, MicOff, Send, StopCircle, Settings, Loader2 } from "lucide-react";
-import { ApiKeyModal } from "@/components/ApiKeyModal";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ApiKeyModal } from "@/components/ApiKeyModal";
 
+// Define a type for our messages
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -43,56 +40,58 @@ const OPENAI_VOICES = [
 const TIMESLICE_MS = 100; // Request data every 100ms
 const RECORDING_DELAY_MS = 500; // Add a small delay before stopping to capture trailing audio
 
-export function VoiceChat() {
+export default function VoiceChat() {
   // Recording states
-  const [isPreparingToRecord, setIsPreparingToRecord] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isPreparingToRecord, setIsPreparingToRecord] = useState(false);
   const [hasReceivedAudioData, setHasReceivedAudioData] = useState(false);
   
   const [transcript, setTranscript] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: "assistant", content: "Hi! How can I assist you today?" }
+  ]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [error, setError] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState<string>("alloy");
-  const [isPlaying, setIsPlaying] = useState(false);
   const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<string>("alloy");
+  
+  // Audio queue state
+  const [audioQueue, setAudioQueue] = useState<string[]>([]);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const recordingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
-  // Initialize audio element
+  // Initialize audio element and load saved preferences
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      audioRef.current = new Audio();
-      audioRef.current.onended = () => {
-        setIsPlaying(false);
-      };
-      
-      // Check for stored API key
-      const storedApiKey = localStorage.getItem("openai-api-key");
-      if (storedApiKey) {
-        setApiKey(storedApiKey);
-      } else {
-        setIsApiKeyModalOpen(true);
-      }
-      
-      // Load saved voice preference
-      const savedVoice = localStorage.getItem("openai-voice");
-      if (savedVoice) {
-        setSelectedVoice(savedVoice);
-      }
+    // Create audio element if it doesn't exist
+    audioRef.current = new Audio();
+    
+    // Check for stored API key
+    const storedApiKey = localStorage.getItem("openai-api-key");
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
+    } else {
+      setIsApiKeyModalOpen(true);
     }
     
+    // Load saved voice preference
+    const savedVoice = localStorage.getItem("openai-voice");
+    if (savedVoice) {
+      setSelectedVoice(savedVoice);
+    }
+    
+    // Cleanup function
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current = null;
+        audioRef.current.src = '';
       }
       
       // Clean up any recording stream on unmount
@@ -100,6 +99,7 @@ export function VoiceChat() {
         recordingStream.getTracks().forEach(track => track.stop());
       }
       
+      // Clear any timeouts
       if (stopTimeoutRef.current) {
         clearTimeout(stopTimeoutRef.current);
       }
@@ -110,6 +110,87 @@ export function VoiceChat() {
     };
   }, [recordingStream]);
   
+  // Handle audio queue processing
+  useEffect(() => {
+    const playNextInQueue = async () => {
+      // Only process if we're not already playing and we have items in the queue
+      if (!isPlaying && audioQueue.length > 0 && audioRef.current) {
+        try {
+          const text = audioQueue[0];
+          console.log(`Playing audio: "${text.substring(0, 30)}..."`);
+          
+          // Set playing state
+          setIsPlaying(true);
+          
+          // Get audio from API
+          const response = await fetch("/api/speak", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              text,
+              voice: selectedVoice,
+              apiKey,
+            }),
+          });
+          
+          if (!response.ok) {
+            throw new Error("Failed to generate speech");
+          }
+          
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          // Set up audio element
+          audioRef.current.src = audioUrl;
+          
+          // Set up event listeners for this playback
+          const onEnded = () => {
+            console.log("Audio playback ended");
+            setIsPlaying(false);
+            // Remove the item we just played
+            setAudioQueue(prev => prev.slice(1));
+            // Clean up event listeners
+            if (audioRef.current) {
+              audioRef.current.removeEventListener('ended', onEnded);
+              audioRef.current.removeEventListener('error', onError);
+            }
+          };
+          
+          const onError = () => {
+            console.error("Audio playback error");
+            setIsPlaying(false);
+            setError("Failed to play audio response");
+            // Remove the failed item
+            setAudioQueue(prev => prev.slice(1));
+            // Clean up event listeners
+            if (audioRef.current) {
+              audioRef.current.removeEventListener('ended', onEnded);
+              audioRef.current.removeEventListener('error', onError);
+            }
+          };
+          
+          // Add event listeners
+          audioRef.current.addEventListener('ended', onEnded, { once: true });
+          audioRef.current.addEventListener('error', onError, { once: true });
+          
+          // Play the audio
+          await audioRef.current.play();
+          
+        } catch (error) {
+          console.error("Error playing audio:", error);
+          setIsPlaying(false);
+          setError("Failed to play audio response");
+          // Remove the failed item
+          setAudioQueue(prev => prev.slice(1));
+        }
+      }
+    };
+    
+    playNextInQueue();
+  }, [audioQueue, isPlaying, apiKey, selectedVoice]);
+  
   // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -118,17 +199,17 @@ export function VoiceChat() {
   // Safety timeout for recording preparation
   useEffect(() => {
     if (isPreparingToRecord) {
-      // If we're still in "preparing" state after 5 seconds, something went wrong
       const timeout = setTimeout(() => {
-        if (isPreparingToRecord && !isRecording) {
+        if (isPreparingToRecord) {
+          console.log("Recording preparation timed out");
           setIsPreparingToRecord(false);
-          setError("Recording initialization timed out. Please try again.");
+          setError("Microphone access timed out. Please try again.");
         }
-      }, 5000);
+      }, 5000); // 5 second timeout
       
       return () => clearTimeout(timeout);
     }
-  }, [isPreparingToRecord, isRecording]);
+  }, [isPreparingToRecord]);
   
   const startRecording = async () => {
     try {
@@ -364,46 +445,14 @@ export function VoiceChat() {
       const assistantMessage: Message = { role: "assistant", content: data.response };
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Play the response using OpenAI's TTS
-      await playResponseAudio(data.response);
+      // Add response to audio queue
+      console.log(`Adding to audio queue: "${data.response.substring(0, 30)}..."`);
+      setAudioQueue(prev => [...prev, data.response]);
     } catch (err) {
       console.error("Error sending message:", err);
       setError(err instanceof Error ? err.message : "Failed to get response");
     } finally {
       setIsProcessing(false);
-    }
-  };
-  
-  const playResponseAudio = async (text: string) => {
-    try {
-      const response = await fetch("/api/speak", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text,
-          voice: selectedVoice,
-          apiKey,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate speech");
-      }
-      
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.play();
-        setIsPlaying(true);
-      }
-    } catch (err) {
-      console.error("Error playing audio:", err);
-      setError(err instanceof Error ? err.message : "Failed to play audio response");
     }
   };
   
@@ -414,8 +463,11 @@ export function VoiceChat() {
   const stopAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      audioRef.current.src = '';
       setIsPlaying(false);
+      
+      // Clear the audio queue
+      setAudioQueue([]);
     }
   };
   
@@ -605,5 +657,3 @@ export function VoiceChat() {
     </div>
   );
 }
-
-export default VoiceChat;
