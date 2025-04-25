@@ -47,6 +47,7 @@ export default function VoiceChat() {
   const [hasReceivedAudioData, setHasReceivedAudioData] = useState(false);
   
   const [transcript, setTranscript] = useState("");
+  const [textInput, setTextInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hi! How can I assist you today?" }
   ]);
@@ -422,6 +423,7 @@ export default function VoiceChat() {
     const newMessage: Message = { role: "user", content: text };
     setMessages(prev => [...prev, newMessage]);
     setTranscript("");
+    setTextInput("");
     setIsProcessing(true);
     
     try {
@@ -487,6 +489,13 @@ export default function VoiceChat() {
       stopRecording();
     } else {
       startRecording();
+    }
+  };
+  
+  const handleTextInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (textInput.trim()) {
+      sendMessage(textInput);
     }
   };
   
@@ -594,19 +603,20 @@ export default function VoiceChat() {
             </div>
           )}
           
-          <div className="flex items-center gap-2 p-4">
+          <form onSubmit={handleTextInputSubmit} className="flex items-center gap-2 p-4">
             <Button 
+              type="button"
               variant={recordButtonState.variant}
               size="icon"
-              className="rounded-full h-12 w-12"
+              className="rounded-full h-12 w-12 flex-shrink-0"
               onClick={toggleRecording}
               disabled={recordButtonState.disabled}
             >
               {recordButtonState.icon}
             </Button>
             
-            <div className="flex-1">
-              {isProcessing && (
+            <div className="flex-1 relative">
+              {isProcessing ? (
                 <div className="flex justify-center">
                   <div className="animate-pulse flex space-x-2">
                     <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
@@ -614,6 +624,15 @@ export default function VoiceChat() {
                     <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
                   </div>
                 </div>
+              ) : (
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Type a message..."
+                  className="w-full rounded-full border border-gray-300 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={isProcessing}
+                />
               )}
             </div>
             
@@ -664,15 +683,15 @@ export default function VoiceChat() {
             </Button>
             
             <Button
+              type="submit"
               variant="outline"
               size="icon"
-              className="rounded-full"
-              onClick={() => sendMessage(transcript)}
-              disabled={!transcript.trim() || isProcessing}
+              className="rounded-full flex-shrink-0"
+              disabled={(!textInput.trim() && !transcript.trim()) || isProcessing}
             >
               <Send className="h-4 w-4" />
             </Button>
-          </div>
+          </form>
         </div>
       </Card>
     </div>
