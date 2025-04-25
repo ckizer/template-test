@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful, friendly AI voice assistant. Keep responses concise and conversational, optimized for voice playback.',
+          content: 'You are a helpful, friendly AI voice assistant. Keep responses concise and conversational, optimized for voice playback',
         },
         { role: 'user', content: message },
       ],

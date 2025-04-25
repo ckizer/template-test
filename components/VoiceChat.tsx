@@ -58,6 +58,7 @@ export default function VoiceChat() {
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [recordingStream, setRecordingStream] = useState<MediaStream | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string>("alloy");
+  const [speechSpeed, setSpeechSpeed] = useState<number>(1.0);
   
   // Audio queue state
   const [audioQueue, setAudioQueue] = useState<string[]>([]);
@@ -86,6 +87,12 @@ export default function VoiceChat() {
     const savedVoice = localStorage.getItem("openai-voice");
     if (savedVoice) {
       setSelectedVoice(savedVoice);
+    }
+    
+    // Load saved speech speed
+    const savedSpeed = localStorage.getItem("openai-speech-speed");
+    if (savedSpeed) {
+      setSpeechSpeed(parseFloat(savedSpeed));
     }
     
     // Cleanup function
@@ -132,6 +139,7 @@ export default function VoiceChat() {
             body: JSON.stringify({
               text,
               voice: selectedVoice,
+              speed: speechSpeed,
               apiKey,
             }),
           });
@@ -190,7 +198,7 @@ export default function VoiceChat() {
     };
     
     playNextInQueue();
-  }, [audioQueue, isPlaying, apiKey, selectedVoice]);
+  }, [audioQueue, isPlaying, apiKey, selectedVoice, speechSpeed]);
   
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -484,6 +492,12 @@ export default function VoiceChat() {
     localStorage.setItem("openai-voice", voiceId);
   };
   
+  const handleSpeedChange = (value: string) => {
+    const speed = parseFloat(value);
+    setSpeechSpeed(speed);
+    localStorage.setItem("openai-speech-speed", value);
+  };
+  
   const toggleRecording = () => {
     if (isPreparingToRecord || isRecording) {
       stopRecording();
@@ -661,6 +675,26 @@ export default function VoiceChat() {
                             {voice.name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="speed-select">Speech Speed</Label>
+                    <Select 
+                      value={speechSpeed.toString()} 
+                      onValueChange={handleSpeedChange}
+                    >
+                      <SelectTrigger id="speed-select">
+                        <SelectValue placeholder="Select speed" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0.5">Slow (0.5x)</SelectItem>
+                        <SelectItem value="0.75">Slower (0.75x)</SelectItem>
+                        <SelectItem value="1.0">Normal (1.0x)</SelectItem>
+                        <SelectItem value="1.25">Faster (1.25x)</SelectItem>
+                        <SelectItem value="1.5">Fast (1.5x)</SelectItem>
+                        <SelectItem value="2.0">Very Fast (2.0x)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

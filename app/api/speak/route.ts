@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, voice, apiKey } = await request.json();
+    const { text, voice, speed, apiKey } = await request.json();
 
     if (!text) {
       return NextResponse.json(
@@ -27,13 +27,27 @@ export async function POST(request: NextRequest) {
     // Default to 'nova' voice if none specified
     // Available voices for gpt-4o-mini-tts: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
     const selectedVoice = voice || 'sage';
+    
+    // Default speed is 1.0, can range from 0.25 to 4.0
+    const speechSpeed = speed !== undefined ? Number(speed) : 2.0;
 
     // Generate speech from text using OpenAI's TTS API with enhanced control
     const mp3Response = await openai.audio.speech.create({
       model: 'gpt-4o-mini-tts',
       voice: selectedVoice,
       input: text,
-      // Voice characteristics are controlled by the selected voice
+      speed: speechSpeed,
+      // TypeScript doesn't know about this parameter yet, but it's supported by the API
+      ...(
+        {
+          voice_instructions: `Voice Affect: Calm, composed, and reassuring. Competent and in control, instilling trust.
+                              Tone: Sincere, empathetic, with genuine concern for the customer and understanding of the situatio .
+                              Pacing: Slower during the apology to allow for clarity and processing. Faster when offering solutions to signal action and resolution.
+                              Emotions: Calm reassurance, empathy, and gratitude.
+                              Pronunciation: Clear, precise: Ensures clarity, especially with key details. Focus on key words like "refund" and "patience. From the deep southern accent" 
+                              Pauses: Before and after the apology to give space for processing the apology.`
+        } as any
+      )
     });
 
     // Convert the response to an ArrayBuffer

@@ -57,7 +57,7 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySubmit }: ApiKeyModalProp
             <Label htmlFor="api-key">API Key</Label>
             <Input
               id="api-key"
-              type="password"
+              type="text"
               placeholder="sk-..."
               value={apiKey}
               onChange={(e) => {
@@ -66,6 +66,9 @@ export function ApiKeyModal({ isOpen, onClose, onApiKeySubmit }: ApiKeyModalProp
               }}
               className="bg-white/50 dark:bg-gray-800/50"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Your API key is only stored locally in your browser.
+            </p>
             {error && <p className="text-sm text-red-500">{error}</p>}
           </div>
         </div>
