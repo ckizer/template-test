@@ -1,0 +1,42 @@
+[build]
+  command = "./netlify-build.sh"
+  publish = ".next"
+
+[build.environment]
+  NETLIFY_NEXT_PLUGIN_SKIP = "false"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Force a function to be processed by esbuild
+[functions]
+  node_bundler = "esbuild"
+
+# Skip build-time function bundling
+[functions.api]
+  included_files = ["**"]
+
+# Set environment variables for build time
+[context.production.environment]
+  NEXT_PUBLIC_SITE_URL = "https://harvard-voice-chat-app.netlify.app"
+
+# Handle Next.js routing
+[[redirects]]
+  from = "/*"
+  to = "/_next/static/:splat"
+  status = 200
+  force = true
+  condition = {Path = {matches = "^/_next/static/.*$"}}
+
+[[redirects]]
+  from = "/*"
+  to = "/api/:splat"
+  status = 200
+  force = true
+  condition = {Path = {matches = "^/api/.*$"}}
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/nextjs-server"
+  status = 200
+  force = true

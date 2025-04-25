@@ -2,6 +2,9 @@
 
 This document explains the technology choices we made for our voice conversational bot. The goal is to provide an easy-to-understand overview of each component in our tech stack and how they work together to create a smooth, engaging experience for product designers using their iPhones.
 
+## Using liveblocks for multiplayer in the future (we currently don't use it)
+https://liveblocks.io/?ref=godly
+
 ## Frontend Technologies
 
 We built the frontend to be fast, visually appealing, and responsive on mobile devices. Here’s what we use:

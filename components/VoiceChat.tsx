@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mic, MicOff, Send, StopCircle, Settings, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, StopCircle, Settings, Loader2, Volume2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import {
@@ -456,6 +456,12 @@ export default function VoiceChat() {
     }
   };
   
+  const replayMessage = (content: string) => {
+    console.log(`Replaying message: "${content.substring(0, 30)}..."`);
+    // Add the message to the audio queue to be played
+    setAudioQueue(prev => [...prev, content]);
+  };
+  
   const handleApiKeySubmit = (key: string) => {
     setApiKey(key);
   };
@@ -517,143 +523,158 @@ export default function VoiceChat() {
         onApiKeySubmit={handleApiKeySubmit} 
       />
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500 dark:text-gray-400 text-center">
-              Tap the microphone button and start speaking to begin a conversation
-            </p>
-          </div>
-        ) : (
-          messages.map((message, index) => (
-            <Card key={index} className={`${
-              message.role === "user" 
-                ? "ml-auto bg-primary text-primary-foreground" 
-                : "mr-auto bg-muted"
-            } max-w-[80%]`}>
-              <CardContent className="p-3">
-                <p>{message.content}</p>
-              </CardContent>
-            </Card>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      
-      {error && (
-        <div className="bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-2 text-sm rounded-md mx-4 mb-2">
-          {error}
-        </div>
-      )}
-      
-      <div className="border-t border-gray-200 dark:border-gray-800 p-4 backdrop-blur-sm bg-white/30 dark:bg-gray-900/30">
-        {transcript && (
-          <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-            <p className="text-sm">{transcript}</p>
-          </div>
-        )}
-        
-        {isRecording && hasReceivedAudioData && (
-          <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-            <div className="flex items-center justify-center">
-              <div className="relative w-4 h-4">
-                <div className="absolute w-full h-full rounded-full bg-red-500 animate-ping opacity-75"></div>
-                <div className="absolute w-full h-full rounded-full bg-red-500"></div>
-              </div>
-              <p className="ml-2 text-sm">Recording...</p>
+      <Card className="flex flex-col h-full overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-gray-500 dark:text-gray-400 text-center">
+                Tap the microphone button and start speaking to begin a conversation
+              </p>
             </div>
-          </div>
-        )}
-        
-        {isPreparingToRecord && !isRecording && (
-          <div className="mb-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-            <div className="flex items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-              <p className="ml-2 text-sm text-gray-500">Preparing microphone...</p>
-            </div>
-          </div>
-        )}
-        
-        <div className="flex items-center gap-2">
-          <Button 
-            variant={recordButtonState.variant}
-            size="icon"
-            className="rounded-full h-12 w-12"
-            onClick={toggleRecording}
-            disabled={recordButtonState.disabled}
-          >
-            {recordButtonState.icon}
-          </Button>
-          
-          <div className="flex-1">
-            {isProcessing && (
-              <div className="flex justify-center">
-                <div className="animate-pulse flex space-x-2">
-                  <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
-                  <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
-                  <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="space-y-4">
-                <h4 className="font-medium">Voice Settings</h4>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="voice-select">OpenAI Voice</Label>
-                  <Select 
-                    value={selectedVoice} 
-                    onValueChange={handleVoiceChange}
-                  >
-                    <SelectTrigger id="voice-select">
-                      <SelectValue placeholder="Select a voice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPENAI_VOICES.map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          {voice.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="text-xs text-gray-500">
-                  Voice settings are saved automatically.
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-          
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full"
-            onClick={stopAudio}
-            disabled={!isPlaying}
-          >
-            <MicOff className="h-4 w-4" />
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full"
-            onClick={() => sendMessage(transcript)}
-            disabled={!transcript.trim() || isProcessing}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          ) : (
+            messages.map((message, index) => (
+              <Card key={index} className={`${
+                message.role === "user" 
+                  ? "ml-auto bg-primary text-primary-foreground" 
+                  : "mr-auto bg-muted"
+              } max-w-[80%]`}>
+                <CardContent className="p-3">
+                  <div className="flex justify-between items-start">
+                    <p>{message.content}</p>
+                    {message.role === "assistant" && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 ml-2 -mt-1 -mr-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        onClick={() => replayMessage(message.content)}
+                        title="Replay this message"
+                      >
+                        <Volume2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+          <div ref={messagesEndRef} />
         </div>
-      </div>
+        
+        {error && (
+          <div className="bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-2 text-sm rounded-md mx-4 mb-2">
+            {error}
+          </div>
+        )}
+        
+        <div className="border-t border-gray-200 dark:border-gray-800 backdrop-blur-sm bg-white/30 dark:bg-gray-900/30">
+          {transcript && (
+            <div className="mx-4 mt-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-sm">{transcript}</p>
+            </div>
+          )}
+          
+          {isRecording && hasReceivedAudioData && (
+            <div className="mx-4 mt-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <div className="flex items-center justify-center">
+                <div className="relative w-4 h-4">
+                  <div className="absolute w-full h-full rounded-full bg-red-500 animate-ping opacity-75"></div>
+                  <div className="absolute w-full h-full rounded-full bg-red-500"></div>
+                </div>
+                <p className="ml-2 text-sm">Recording...</p>
+              </div>
+            </div>
+          )}
+          
+          {isPreparingToRecord && !isRecording && (
+            <div className="mx-4 mt-4 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                <p className="ml-2 text-sm text-gray-500">Preparing microphone...</p>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-2 p-4">
+            <Button 
+              variant={recordButtonState.variant}
+              size="icon"
+              className="rounded-full h-12 w-12"
+              onClick={toggleRecording}
+              disabled={recordButtonState.disabled}
+            >
+              {recordButtonState.icon}
+            </Button>
+            
+            <div className="flex-1">
+              {isProcessing && (
+                <div className="flex justify-center">
+                  <div className="animate-pulse flex space-x-2">
+                    <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+                    <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+                    <div className="h-2 w-2 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className="rounded-full">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80">
+                <div className="space-y-4">
+                  <h4 className="font-medium">Voice Settings</h4>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="voice-select">OpenAI Voice</Label>
+                    <Select 
+                      value={selectedVoice} 
+                      onValueChange={handleVoiceChange}
+                    >
+                      <SelectTrigger id="voice-select">
+                        <SelectValue placeholder="Select a voice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OPENAI_VOICES.map((voice) => (
+                          <SelectItem key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="text-xs text-gray-500">
+                    Voice settings are saved automatically.
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full"
+              onClick={stopAudio}
+              disabled={!isPlaying}
+            >
+              <MicOff className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full"
+              onClick={() => sendMessage(transcript)}
+              disabled={!transcript.trim() || isProcessing}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

@@ -12,7 +12,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
       <div className="w-full max-w-md">
         {!showChat ? (
-          <Card className="backdrop-blur-xl bg-white/30 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800 shadow-xl">
+          <Card className="backdrop-blur-xl bg-white/30 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800 shadow-xl ">
             <CardContent className="flex flex-col items-center justify-center p-8 space-y-8">
               <h1 className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 AI Voice Assistant
@@ -32,9 +32,9 @@ export default function Home() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="backdrop-blur-xl bg-white/30 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800 shadow-xl h-[80vh]">
-            <CardContent className="p-4 h-full">
-              <div className="flex justify-between items-center mb-4">
+          <Card className="backdrop-blur-xl bg-white/30 dark:bg-gray-900/30 border border-gray-200  dark:border-gray-800 shadow-xl h-[80vh] p-0">
+            <CardContent className="h-full p-0">
+              <div className="flex justify-between items-center m-4">
                 <h2 className="text-xl font-semibold">Voice Chat</h2>
                 <Button 
                   variant="outline" 
