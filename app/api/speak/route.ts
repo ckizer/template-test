@@ -24,12 +24,14 @@ export async function POST(request: NextRequest) {
       apiKey: apiKey,
     });
 
-    // Default to 'nova' voice if none specified
+    // Default to 'shimmer' voice if none specified
     // Available voices for gpt-4o-mini-tts: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse
-    const selectedVoice = voice || 'sage';
+    const selectedVoice = voice || 'shimmer';
     
-    // Default speed is 1.0, can range from 0.25 to 4.0
-    const speechSpeed = speed !== undefined ? Number(speed) : 2.0;
+    // Default speed is 1.5, can range from 0.25 to 4.0
+    const speechSpeed = speed !== undefined ? Number(speed) : 1.5;
+    
+    console.log(`🔊 TTS Request - Voice: ${selectedVoice}, Speed: ${speechSpeed}, Text length: ${text.length} chars`);
 
     // Generate speech from text using OpenAI's TTS API with enhanced control
     const mp3Response = await openai.audio.speech.create({

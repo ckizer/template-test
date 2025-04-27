@@ -35,7 +35,7 @@ export default function Home() {
           <Card className="backdrop-blur-xl bg-white/30 dark:bg-gray-900/30 border border-gray-200  dark:border-gray-800 shadow-xl h-[80vh] p-0">
             <CardContent className="h-full p-0">
               <div className="flex justify-between items-center m-4">
-                <h2 className="text-xl font-semibold">Voice Chat</h2>
+                <h2 className="text-xl font-semibold">UI Component Chat</h2>
                 <Button 
                   variant="outline" 
                   size="sm"

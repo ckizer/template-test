@@ -549,8 +549,8 @@ export default function VoiceChat() {
     useEffect(() => {
       // Get the API key and speed from localStorage
       apiKeyRef.current = localStorage.getItem('openai-api-key');
-      const savedSpeed = localStorage.getItem('tts-speed');
-      speedRef.current = savedSpeed ? parseFloat(savedSpeed) : 1.0;
+      const savedSpeed = localStorage.getItem('openai-speech-speed');
+      speedRef.current = savedSpeed ? parseFloat(savedSpeed) : 1.5;
     }, []);
 
     const playAudio = async () => {
