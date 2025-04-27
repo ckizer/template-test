@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Mic, MicOff, Send, StopCircle, Settings, Loader2, Volume2 } from "lucide-react";
+import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,35 +15,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiKeyModal } from "@/components/ApiKeyModal";
+import { renderFunctionResult } from '@/lib/functions';
+import type { FunctionCallData as FunctionCallDataType } from '@/lib/functions';
 
-// Define a type for weather data
-interface WeatherData {
-  location: string;
-  temperature: string;
-  condition: string;
-  humidity: string;
-  windSpeed: string;
-  error?: string;
-}
-
-// Define a type for function call arguments
-interface FunctionCallArgs {
-  zipcode: string;
-  [key: string]: string | number | boolean;
-}
-
-// Define a type for function call data
-interface FunctionCallData {
-  name: string;
-  args: FunctionCallArgs;
-  result: WeatherData | Record<string, unknown>;
-}
-
-// Define a type for our messages
+// Define the Message type
 interface Message {
   role: "user" | "assistant";
   content: string;
-  functionCalled?: FunctionCallData | null;
+  functionCalled?: FunctionCallDataType | null;
 }
 
 // OpenAI voice options for gpt-4o-mini-tts
@@ -494,12 +474,6 @@ export default function VoiceChat() {
     }
   };
   
-  const replayMessage = (content: string) => {
-    console.log(`Replaying message: "${content.substring(0, 30)}..."`);
-    // Add the message to the audio queue to be played
-    setAudioQueue(prev => [...prev, content]);
-  };
-  
   const handleApiKeySubmit = (key: string) => {
     setApiKey(key);
   };
@@ -566,6 +540,104 @@ export default function VoiceChat() {
   
   const recordButtonState = getRecordButtonState();
   
+  const MessageComponent = ({ message }: { message: Message }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const apiKeyRef = useRef<string | null>(null);
+    const speedRef = useRef<number>(1.0);
+
+    useEffect(() => {
+      // Get the API key and speed from localStorage
+      apiKeyRef.current = localStorage.getItem('openai-api-key');
+      const savedSpeed = localStorage.getItem('tts-speed');
+      speedRef.current = savedSpeed ? parseFloat(savedSpeed) : 1.0;
+    }, []);
+
+    const playAudio = async () => {
+      if (isPlaying || !apiKeyRef.current) return;
+      
+      setIsPlaying(true);
+      
+      try {
+        // Get voice instructions from localStorage or use default
+        let voiceInstructions = localStorage.getItem('voice-instructions');
+        if (!voiceInstructions) {
+          // Fetch default voice instructions
+          const response = await fetch('/.cursor/rules/voice_instructions');
+          if (response.ok) {
+            voiceInstructions = await response.text();
+            localStorage.setItem('voice-instructions', voiceInstructions);
+          }
+        }
+        
+        const response = await fetch('/api/speak', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            text: message.content,
+            apiKey: apiKeyRef.current,
+            speed: speedRef.current,
+            voice_instructions: voiceInstructions
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate speech');
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.play();
+        }
+      } catch (error) {
+        console.error('Error playing audio:', error);
+      } finally {
+        setIsPlaying(false);
+      }
+    };
+
+    return (
+      <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+        <Card className={cn("mb-4 max-w-[80%] shadow-sm border-0", 
+          message.role === "user" ? "bg-primary text-primary-foreground" : "bg-card")}>
+          <CardContent className="p-3">
+            <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+            
+            {/* Display function call results if available */}
+            {message.role === "assistant" && message.functionCalled && (
+              <div className="mt-2 border-t pt-2 border-gray-200 dark:border-gray-700">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Function called: <span className="font-mono">{message.functionCalled.name}</span>
+                </div>
+                {renderFunctionResult(message.functionCalled.name, message.functionCalled.result)}
+              </div>
+            )}
+            
+            {message.role === "assistant" && (
+              <div className="flex justify-end mt-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6" 
+                  onClick={playAudio}
+                  disabled={isPlaying}
+                >
+                  <Volume2 className="h-4 w-4" />
+                </Button>
+                <audio ref={audioRef} onEnded={() => setIsPlaying(false)} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full max-w-md mx-auto">
       <ApiKeyModal 
@@ -584,48 +656,7 @@ export default function VoiceChat() {
             </div>
           ) : (
             messages.map((message, index) => (
-              <Card key={index} className={`${
-                message.role === "user" 
-                  ? "ml-auto bg-primary text-primary-foreground" 
-                  : "mr-auto bg-muted"
-              } max-w-[80%]`}>
-                <CardContent className="p-3">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p>{message.content}</p>
-                      
-                      {message.functionCalled && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs">
-                          <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
-                            <span className="mr-1">🔧</span> Function called: {message.functionCalled.name}
-                          </div>
-                          {message.functionCalled.name === "get_weather" && (
-                            <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-                              <p><strong>Location:</strong> {(message.functionCalled.result as WeatherData).location}</p>
-                              <p><strong>Temperature:</strong> {(message.functionCalled.result as WeatherData).temperature}</p>
-                              <p><strong>Condition:</strong> {(message.functionCalled.result as WeatherData).condition}</p>
-                              <p><strong>Humidity:</strong> {(message.functionCalled.result as WeatherData).humidity}</p>
-                              <p><strong>Wind:</strong> {(message.functionCalled.result as WeatherData).windSpeed}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {message.role === "assistant" && (
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6 ml-2 -mt-1 -mr-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                        onClick={() => replayMessage(message.content)}
-                        title="Replay this message"
-                      >
-                        <Volume2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <MessageComponent key={index} message={message} />
             ))
           )}
           <div ref={messagesEndRef} />

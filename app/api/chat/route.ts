@@ -1,27 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-
-// Function to get weather data for a given zipcode
-async function getWeatherData(zipcode: string) {
-  try {
-    // This is a placeholder - you would replace this with a real weather API call
-    // Example using OpenWeatherMap API:
-    // const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?zip=${zipcode},us&appid=${process.env.WEATHER_API_KEY}&units=imperial`);
-    // const data = await response.json();
-    
-    // For demonstration, returning mock data
-    return {
-      location: `${zipcode}`,
-      temperature: "72°F",
-      condition: "Partly Cloudy",
-      humidity: "45%",
-      windSpeed: "8 mph"
-    };
-  } catch (error) {
-    console.error("Error fetching weather data:", error);
-    return { error: "Unable to fetch weather data at this time." };
-  }
-}
+import { functionConfigs, executeFunction, FunctionCallArgs } from '@/lib/functions/server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,37 +25,26 @@ export async function POST(request: NextRequest) {
       apiKey: apiKey,
     });
 
-    // Define available functions
-    const functions = [
-      {
-        name: "get_weather",
-        description: "Get the current weather for a specific location by zipcode",
-        parameters: {
-          type: "object",
-          properties: {
-            zipcode: {
-              type: "string",
-              description: "The US zipcode to get weather for, e.g. 90210"
-            }
-          },
-          required: ["zipcode"]
-        }
-      }
-    ];
-
     // Call OpenAI API with function calling enabled
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful, friendly AI voice assistant. Keep responses concise and conversational, optimized for voice playback. When users ask about weather, extract their zipcode and use the get_weather function.',
+          content: 'You are a helpful, friendly AI voice assistant. Keep responses concise and conversational, optimized for voice playback. When users ask about weather, extract their zipcode and use the get_weather function. When users mention quiz questions or ask for a quiz, use the get_quiz_question function.',
         },
         { role: 'user', content: message },
       ],
       max_tokens: 1000,
       temperature: 0.7,
-      tools: functions.map(func => ({ type: "function", function: func })),
+      tools: functionConfigs.map(func => ({
+        type: "function",
+        function: {
+          name: func.name,
+          description: func.description,
+          parameters: func.parameters
+        }
+      })),
       tool_choice: "auto"
     });
 
@@ -89,17 +57,17 @@ export async function POST(request: NextRequest) {
       console.log(" FUNCTION CALL DETECTED:", toolCall.function.name);
       console.log(" FUNCTION ARGUMENTS:", toolCall.function.arguments);
       
-      if (toolCall.function.name === "get_weather") {
-        // Parse the arguments as JSON
-        const args = JSON.parse(toolCall.function.arguments);
-        const zipcode = args.zipcode;
+      // Parse the arguments as JSON
+      const args = JSON.parse(toolCall.function.arguments) as FunctionCallArgs;
+      
+      // Execute the appropriate function
+      try {
+        console.log(` EXECUTING FUNCTION: ${toolCall.function.name}`);
         
-        console.log(` WEATHER FUNCTION CALLED FOR ZIPCODE: ${zipcode}`);
+        // Call the function with the provided arguments
+        const functionResult = await executeFunction(toolCall.function.name, args);
         
-        // Call the weather function with the provided zipcode
-        const weatherData = await getWeatherData(zipcode);
-        
-        console.log(" WEATHER DATA RETRIEVED:", JSON.stringify(weatherData));
+        console.log(" FUNCTION RESULT:", JSON.stringify(functionResult));
         
         // Send the function response back to the model to get a final response
         const secondCompletion = await openai.chat.completions.create({
@@ -114,7 +82,7 @@ export async function POST(request: NextRequest) {
             {
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: JSON.stringify(weatherData)
+              content: JSON.stringify(functionResult)
             }
           ],
           max_tokens: 1000,
@@ -124,7 +92,13 @@ export async function POST(request: NextRequest) {
         const finalResponse = secondCompletion.choices[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
         
         // Add a prefix to indicate that a function was called
-        const enhancedResponse = `[Weather data retrieved] ${finalResponse}`;
+        const functionPrefix = toolCall.function.name === 'get_weather' 
+          ? '[Weather data retrieved]' 
+          : toolCall.function.name === 'get_quiz_question'
+            ? '[Quiz question retrieved]'
+            : '[Function executed]';
+            
+        const enhancedResponse = `${functionPrefix} ${finalResponse}`;
         console.log(" FINAL RESPONSE WITH FUNCTION DATA:", enhancedResponse);
         
         return NextResponse.json({ 
@@ -132,8 +106,15 @@ export async function POST(request: NextRequest) {
           functionCalled: {
             name: toolCall.function.name,
             args: args,
-            result: weatherData
+            result: functionResult
           }
+        });
+      } catch (error) {
+        const functionError = error as Error;
+        console.error(" ERROR EXECUTING FUNCTION:", functionError);
+        return NextResponse.json({ 
+          response: `I'm sorry, I encountered an error while trying to process your request. ${functionError.message}`,
+          functionCalled: null
         });
       }
     }
@@ -142,29 +123,11 @@ export async function POST(request: NextRequest) {
     const response = responseMessage?.content || 'Sorry, I couldn\'t generate a response.';
     console.log(" REGULAR RESPONSE (NO FUNCTION CALLED)");
     return NextResponse.json({ response, functionCalled: null });
-  } catch (error: unknown) {
-    console.error('Error processing chat request:', error);
-    
-    // Type guard for error with status property
-    const apiError = error as { status?: number; message?: string };
-    
-    // Handle OpenAI API specific errors
-    if (apiError.status === 401) {
-      return NextResponse.json(
-        { error: 'Invalid API key. Please check your OpenAI API key and try again.' },
-        { status: 401 }
-      );
-    }
-    
-    if (apiError.status === 429) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
+  } catch (error) {
+    const apiError = error as Error;
+    console.error(" ERROR IN CHAT API:", apiError);
     return NextResponse.json(
-      { error: apiError.message || 'An error occurred while processing your request' },
+      { error: `Error processing request: ${apiError.message}` },
       { status: 500 }
     );
   }
