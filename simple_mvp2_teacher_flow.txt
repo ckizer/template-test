@@ -1,0 +1,13 @@
+flowchart TD
+    start([Start]) --> receivePDF[Receive student's PDF submission]
+    receivePDF --> viewMaterials[View submission materials]
+    viewMaterials --> handwritten[View handwritten version]
+    viewMaterials --> textConverted[View text-converted version]
+    viewMaterials --> aiSuggestions[View AI feedback suggestions]
+    
+    handwritten --> teacherAnnotate[Teacher annotates assignment]
+    textConverted --> teacherAnnotate
+    aiSuggestions --> teacherAnnotate
+    
+    teacherAnnotate --> sendBack[Send annotated assignment back to student]
+    sendBack --> end([End])

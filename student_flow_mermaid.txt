@@ -1,0 +1,28 @@
+flowchart TD
+    start([Start]) --> canvas[Access Canvas dropbox assessment]
+    canvas --> takePicture[Select option to take picture]
+    takePicture --> holdPaper[Hold paper in front of camera]
+    holdPaper --> capture[Camera captures assignment]
+    capture --> multiPage{Multiple pages?}
+    
+    multiPage -->|Yes| scanMore[Select option to scan more pages]
+    scanMore --> holdPaper
+    
+    multiPage -->|No| review[Review captured assignment]
+    review --> satisfied{Satisfied with capture?}
+    satisfied -->|No| holdPaper
+    
+    satisfied -->|Yes| submit[Submit assignment to teacher]
+    submit --> end([End])
+    
+    style start fill:#d4f1c5,stroke:#4caf50
+    style end fill:#d4f1c5,stroke:#4caf50
+    style canvas fill:#f5f5f5,stroke:#333
+    style takePicture fill:#f5f5f5,stroke:#333
+    style holdPaper fill:#f5f5f5,stroke:#333
+    style capture fill:#f5f5f5,stroke:#333
+    style scanMore fill:#f5f5f5,stroke:#333
+    style review fill:#f5f5f5,stroke:#333
+    style submit fill:#f5f5f5,stroke:#333
+    style multiPage fill:#d1e7f0,stroke:#0288d1
+    style satisfied fill:#d1e7f0,stroke:#0288d1

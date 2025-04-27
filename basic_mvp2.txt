@@ -1,0 +1,30 @@
+graph TD
+    %% MVP2 Student View
+    A[In Canvas, option to take picture of assignment]
+    B[Hold up paper assignment]
+    C[Webcam captures assignment without student/background]
+    D[AI interprets student assignment]
+    E[Creates copy with handwriting converted to text]
+    F[Provides feedback before submission]
+    G[Student can repeat steps or submit]
+    H[Submit assignment to teacher]
+    
+    A --> B --> C --> D
+    D --> E
+    D --> F
+    E --> G
+    F --> G
+    G --> H
+    
+    %% MVP2 Teacher View
+    I[Teacher receives PDF of assignment]
+    J[Teacher sees handwritten version and text-converted version]
+    K[Teacher sees AI suggestions for feedback]
+    L[Teacher annotates assignment]
+    M[Teacher sends annotated assignment back to student]
+    
+    H --> I --> J
+    I --> K
+    J --> L
+    K --> L
+    L --> M

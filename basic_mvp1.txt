@@ -1,0 +1,15 @@
+graph TD
+    %% MVP1 Student View
+    A[In Canvas, option to take picture of assignment]
+    B[Hold up paper in front of camera]
+    C[Camera captures assignment without student/background]
+    D[Submit assignment to teacher]
+    
+    A --> B --> C --> D
+    
+    %% MVP1 Teacher View
+    E[Teacher receives PDF of assignment]
+    F[Teacher annotates assignment]
+    G[Teacher sends annotated assignment back to student]
+    
+    D --> E --> F --> G
