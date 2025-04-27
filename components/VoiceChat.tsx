@@ -15,10 +15,34 @@ import {
 } from "@/components/ui/select";
 import { ApiKeyModal } from "@/components/ApiKeyModal";
 
+// Define a type for weather data
+interface WeatherData {
+  location: string;
+  temperature: string;
+  condition: string;
+  humidity: string;
+  windSpeed: string;
+  error?: string;
+}
+
+// Define a type for function call arguments
+interface FunctionCallArgs {
+  zipcode: string;
+  [key: string]: string | number | boolean;
+}
+
+// Define a type for function call data
+interface FunctionCallData {
+  name: string;
+  args: FunctionCallArgs;
+  result: WeatherData | Record<string, unknown>;
+}
+
 // Define a type for our messages
 interface Message {
   role: "user" | "assistant";
   content: string;
+  functionCalled?: FunctionCallData | null;
 }
 
 // OpenAI voice options for gpt-4o-mini-tts
@@ -431,7 +455,7 @@ export default function VoiceChat() {
     const newMessage: Message = { role: "user", content: text };
     setMessages(prev => [...prev, newMessage]);
     setTranscript("");
-    setTextInput("");
+    setTextInput(""); // Clear text input after sending
     setIsProcessing(true);
     
     try {
@@ -452,7 +476,11 @@ export default function VoiceChat() {
       }
       
       const data = await response.json();
-      const assistantMessage: Message = { role: "assistant", content: data.response };
+      const assistantMessage: Message = { 
+        role: "assistant", 
+        content: data.response,
+        functionCalled: data.functionCalled
+      };
       setMessages(prev => [...prev, assistantMessage]);
       
       // Add response to audio queue
@@ -563,7 +591,27 @@ export default function VoiceChat() {
               } max-w-[80%]`}>
                 <CardContent className="p-3">
                   <div className="flex justify-between items-start">
-                    <p>{message.content}</p>
+                    <div className="flex-1">
+                      <p>{message.content}</p>
+                      
+                      {message.functionCalled && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs">
+                          <div className="flex items-center text-blue-600 dark:text-blue-400 font-medium">
+                            <span className="mr-1">🔧</span> Function called: {message.functionCalled.name}
+                          </div>
+                          {message.functionCalled.name === "get_weather" && (
+                            <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
+                              <p><strong>Location:</strong> {(message.functionCalled.result as WeatherData).location}</p>
+                              <p><strong>Temperature:</strong> {(message.functionCalled.result as WeatherData).temperature}</p>
+                              <p><strong>Condition:</strong> {(message.functionCalled.result as WeatherData).condition}</p>
+                              <p><strong>Humidity:</strong> {(message.functionCalled.result as WeatherData).humidity}</p>
+                              <p><strong>Wind:</strong> {(message.functionCalled.result as WeatherData).windSpeed}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
                     {message.role === "assistant" && (
                       <Button 
                         variant="ghost" 

@@ -86,13 +86,20 @@ export async function POST(request: NextRequest) {
     if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
       const toolCall = responseMessage.tool_calls[0];
       
+      console.log(" FUNCTION CALL DETECTED:", toolCall.function.name);
+      console.log(" FUNCTION ARGUMENTS:", toolCall.function.arguments);
+      
       if (toolCall.function.name === "get_weather") {
         // Parse the arguments as JSON
         const args = JSON.parse(toolCall.function.arguments);
         const zipcode = args.zipcode;
         
+        console.log(` WEATHER FUNCTION CALLED FOR ZIPCODE: ${zipcode}`);
+        
         // Call the weather function with the provided zipcode
         const weatherData = await getWeatherData(zipcode);
+        
+        console.log(" WEATHER DATA RETRIEVED:", JSON.stringify(weatherData));
         
         // Send the function response back to the model to get a final response
         const secondCompletion = await openai.chat.completions.create({
@@ -115,13 +122,26 @@ export async function POST(request: NextRequest) {
         });
         
         const finalResponse = secondCompletion.choices[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
-        return NextResponse.json({ response: finalResponse });
+        
+        // Add a prefix to indicate that a function was called
+        const enhancedResponse = `[Weather data retrieved] ${finalResponse}`;
+        console.log(" FINAL RESPONSE WITH FUNCTION DATA:", enhancedResponse);
+        
+        return NextResponse.json({ 
+          response: enhancedResponse,
+          functionCalled: {
+            name: toolCall.function.name,
+            args: args,
+            result: weatherData
+          }
+        });
       }
     }
 
     // If no function was called, return the regular response
     const response = responseMessage?.content || 'Sorry, I couldn\'t generate a response.';
-    return NextResponse.json({ response });
+    console.log(" REGULAR RESPONSE (NO FUNCTION CALLED)");
+    return NextResponse.json({ response, functionCalled: null });
   } catch (error: unknown) {
     console.error('Error processing chat request:', error);
     
